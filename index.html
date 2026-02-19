@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StressBuster 💥</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Header -->
+    <div id="header">
+        <h1>🔥 STRESS<span>BUSTER</span></h1>
+        <div id="header-right">
+            <label id="upload-btn" class="header-btn" title="Upload Image">
+                📷 Upload
+                <input type="file" id="image-upload" accept="image/*" hidden>
+            </label>
+            <button id="clear-img-btn" class="header-btn" title="Clear Image" style="display:none;">✕ Clear
+                Image</button>
+            <div id="score">Hits: <span id="hit-count">0</span></div>
+        </div>
+    </div>
+
+    <!-- Wall Area -->
+    <div id="wall-area">
+        <canvas id="wall-canvas"></canvas>
+        <canvas id="img-canvas"></canvas>
+        <canvas id="splat-canvas"></canvas>
+        <canvas id="fx-canvas"></canvas>
+    </div>
+
+    <!-- Toolbar -->
+    <div id="toolbar">
+        <div class="tool-group" id="throwables">
+            <button class="tool active" data-tool="tomato" title="Tomato">🍅<span>Tomato</span></button>
+            <button class="tool" data-tool="egg" title="Egg">🥚<span>Egg</span></button>
+            <button class="tool" data-tool="bottle" title="Bottle">🍾<span>Bottle</span></button>
+            <button class="tool" data-tool="cake" title="Cake">🎂<span>Cake</span></button>
+            <button class="tool" data-tool="balloon" title="Balloon">🎈<span>Balloon</span></button>
+        </div>
+        <div class="tool-divider"></div>
+        <div class="tool-group" id="weapons">
+            <button class="tool" data-tool="laser" title="Laser Beam">⚡<span>Laser</span></button>
+            <button class="tool" data-tool="flame" title="Flamethrower">🔥<span>Flame</span></button>
+            <button class="tool" data-tool="spray" title="Paint Spray">🎨<span>Spray</span></button>
+        </div>
+        <div class="tool-divider"></div>
+        <div class="tool-group">
+            <button class="tool" data-tool="hose" title="Water Hose">🚿<span>Hose</span></button>
+        </div>
+        <!-- Color Picker for Spray -->
+        <div id="spray-colors" style="display:none;">
+            <div class="spray-color" data-color="#ff1744" style="background:#ff1744;"></div>
+            <div class="spray-color" data-color="#2979ff" style="background:#2979ff;"></div>
+            <div class="spray-color" data-color="#00e676" style="background:#00e676;"></div>
+            <div class="spray-color" data-color="#ffea00" style="background:#ffea00;"></div>
+            <div class="spray-color" data-color="#d500f9" style="background:#d500f9;"></div>
+            <div class="spray-color" data-color="#ff6d00" style="background:#ff6d00;"></div>
+            <div class="spray-color active" data-color="#ffffff" style="background:#ffffff;"></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
