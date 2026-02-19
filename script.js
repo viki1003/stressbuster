@@ -144,8 +144,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function drawUploadedImage() {
         if (!uploadedImage) return;
         imgCtx.clearRect(0, 0, W, H);
-        // Fit image centered on wall
-        const scale = Math.min(W * 0.7 / uploadedImage.width, H * 0.7 / uploadedImage.height);
+        // Fit image centered on wall — responsive to all screen sizes
+        const fillFactor = W < 600 ? 0.92 : 0.8;
+        const scale = Math.min(W * fillFactor / uploadedImage.width, H * fillFactor / uploadedImage.height, 2);
         const iw = uploadedImage.width * scale;
         const ih = uploadedImage.height * scale;
         imgCtx.drawImage(uploadedImage, (W - iw) / 2, (H - ih) / 2, iw, ih);
@@ -650,17 +651,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     requestAnimationFrame(loop);
 
-    // ═══ INPUT ═══
-    wallArea.addEventListener('mousedown', e => {
-        mouseX = e.clientX; mouseY = e.clientY;
+    // ═══ INPUT (Mouse + Touch) ═══
+    function handleStart(x, y) {
+        mouseX = x; mouseY = y;
         isDown = true;
         const throwables = ['tomato', 'egg', 'bottle', 'cake', 'balloon'];
         if (throwables.includes(currentTool)) {
-            projectiles.push(new Projectile(e.clientX, e.clientY, currentTool));
+            projectiles.push(new Projectile(x, y, currentTool));
         }
+    }
+    function handleMove(x, y) { mouseX = x; mouseY = y; }
+    function handleEnd() { isDown = false; }
+
+    // Mouse events
+    wallArea.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
+    window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', handleEnd);
+
+    // Touch events
+    wallArea.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const t = e.touches[0];
+        handleStart(t.clientX, t.clientY);
+    }, { passive: false });
+    window.addEventListener('touchmove', e => {
+        if (isDown) e.preventDefault();
+        const t = e.touches[0];
+        if (t) handleMove(t.clientX, t.clientY);
+    }, { passive: false });
+    window.addEventListener('touchend', e => {
+        handleEnd();
     });
-    window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
-    window.addEventListener('mouseup', () => { isDown = false; });
+
     wallArea.addEventListener('contextmenu', e => e.preventDefault());
 });
- 
+
