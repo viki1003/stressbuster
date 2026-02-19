@@ -663,3 +663,4 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('mouseup', () => { isDown = false; });
     wallArea.addEventListener('contextmenu', e => e.preventDefault());
 });
+ 
