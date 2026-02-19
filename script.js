@@ -1,5 +1,5 @@
 /* ========================================
-   STRESSBUSTER — Full Feature Build
+   STRESSBUSTER — v3 Full Feature + Customization
    ======================================== */
 const { Engine, World, Bodies, Body } = Matter;
 
@@ -19,15 +19,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const engine = Engine.create({ gravity: { x: 0, y: 2 } });
     const MAX_DEBRIS = 80;
 
-    // ── State (must be declared before resize) ──
+    // ── State ──
     let currentTool = 'tomato';
     let mouseX = 0, mouseY = 0;
     let isDown = false;
     let hitCount = 0;
-    let sprayColor = '#ff1744';
     let uploadedImage = null;
     const projectiles = [];
     const debris = [];
+
+    // ── Tool settings ──
+    let toolSize = 30;
+    let spraySpread = 20;
+    let sprayMode = 'airbrush'; // 'airbrush' or 'clean'
+    let sprayColor = '#ff1744';
 
     let W, H;
     const resize = () => {
@@ -49,7 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
             o.frequency.setValueAtTime(80, now); o.frequency.exponentialRampToValueAtTime(20, now + 0.15);
             g.gain.setValueAtTime(0.35, now); g.gain.linearRampToValueAtTime(0, now + 0.2);
             o.connect(g).connect(audioCtx.destination); o.start(); o.stop(now + 0.2);
-            // wet layer
             const b = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.06, audioCtx.sampleRate);
             const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
             const n = audioCtx.createBufferSource(); n.buffer = b;
@@ -100,11 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const off = (row % 2) ? bw / 2 : 0;
             for (let x = -bw; x < W + bw; x += bw + gap) {
                 const bx = x + off;
-                const c = cols[Math.floor(Math.random() * cols.length)];
-                wallCtx.fillStyle = c;
+                wallCtx.fillStyle = cols[Math.floor(Math.random() * cols.length)];
                 const vw = bw + (Math.random() * 4 - 2), vh = bh + (Math.random() * 2 - 1);
                 wallCtx.fillRect(bx, y, vw, vh);
-                // texture
                 for (let i = 0; i < 10; i++) {
                     wallCtx.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${Math.random() * 0.1})` : `rgba(0,0,0,${Math.random() * 0.12 + 0.03})`;
                     wallCtx.fillRect(bx + Math.random() * vw, y + Math.random() * vh, Math.random() * 5 + 1, Math.random() * 3 + 1);
@@ -144,25 +146,82 @@ document.addEventListener('DOMContentLoaded', () => {
     function drawUploadedImage() {
         if (!uploadedImage) return;
         imgCtx.clearRect(0, 0, W, H);
-        // Fit image centered on wall — responsive to all screen sizes
-        const fillFactor = W < 600 ? 0.92 : 0.8;
-        const scale = Math.min(W * fillFactor / uploadedImage.width, H * fillFactor / uploadedImage.height, 2);
-        const iw = uploadedImage.width * scale;
-        const ih = uploadedImage.height * scale;
-        imgCtx.drawImage(uploadedImage, (W - iw) / 2, (H - ih) / 2, iw, ih);
+        const iw = uploadedImage.width;
+        const ih = uploadedImage.height;
+        // Scale up small images to at least fill 50% of the smaller dimension
+        const minFill = Math.min(W, H) * 0.5;
+        let scale;
+        if (iw < 100 && ih < 100) {
+            // Very small: scale up aggressively
+            scale = Math.min(W * 0.6 / iw, H * 0.6 / ih);
+        } else {
+            const fillFactor = W < 600 ? 0.92 : 0.82;
+            scale = Math.min(W * fillFactor / iw, H * fillFactor / ih);
+        }
+        // Ensure minimum visible size
+        const dw = Math.max(iw * scale, minFill);
+        const dh = Math.max(ih * scale, minFill * (ih / iw));
+        imgCtx.drawImage(uploadedImage, (W - dw) / 2, (H - dh) / 2, dw, dh);
     }
 
-    // ═══ TOOL SELECTION ═══
+    // ═══ TOOL SELECTION & SETTINGS ═══
     const tools = document.querySelectorAll('.tool');
-    const sprayColorsEl = document.getElementById('spray-colors');
+    const settingsPanel = document.getElementById('settings-panel');
+    const sizeRow = document.getElementById('size-row');
+    const spreadRow = document.getElementById('spread-row');
+    const modeRow = document.getElementById('mode-row');
+    const colorRow = document.getElementById('color-row');
+    const sizeSlider = document.getElementById('size-slider');
+    const sizeVal = document.getElementById('size-val');
+    const spreadSlider = document.getElementById('spread-slider');
+    const spreadVal = document.getElementById('spread-val');
+    const modeBtns = document.querySelectorAll('.mode-btn');
     const sprayColorBtns = document.querySelectorAll('.spray-color');
+
+    const CONTINUOUS_TOOLS = ['hose', 'laser', 'flame', 'spray'];
+
+    function updateSettingsPanel() {
+        const show = CONTINUOUS_TOOLS.includes(currentTool);
+        settingsPanel.style.display = show ? 'flex' : 'none';
+        if (!show) return;
+
+        // Size slider: always visible for continuous tools
+        sizeRow.style.display = 'flex';
+        sizeSlider.value = toolSize;
+        sizeVal.textContent = toolSize;
+
+        // Spread: spray only
+        spreadRow.style.display = currentTool === 'spray' ? 'flex' : 'none';
+        // Mode: spray only
+        modeRow.style.display = currentTool === 'spray' ? 'flex' : 'none';
+        // Colors: spray only
+        colorRow.style.display = currentTool === 'spray' ? 'flex' : 'none';
+    }
 
     tools.forEach(btn => {
         btn.addEventListener('click', () => {
             tools.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             currentTool = btn.dataset.tool;
-            sprayColorsEl.style.display = currentTool === 'spray' ? 'flex' : 'none';
+            updateSettingsPanel();
+        });
+    });
+
+    sizeSlider.addEventListener('input', () => {
+        toolSize = parseInt(sizeSlider.value);
+        sizeVal.textContent = toolSize;
+    });
+
+    spreadSlider.addEventListener('input', () => {
+        spraySpread = parseInt(spreadSlider.value);
+        spreadVal.textContent = spraySpread;
+    });
+
+    modeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            modeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            sprayMode = btn.dataset.mode;
         });
     });
 
@@ -197,13 +256,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.rot = 0;
             this.rotV = (Math.random() - 0.5) * 14;
             this.trail = [];
-            // Tool-specific colors
-            if (tool === 'balloon') {
-                this.balloonColor = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
-            }
-            if (tool === 'cake') {
-                this.cakeStyle = CAKE_COLORS[Math.floor(Math.random() * CAKE_COLORS.length)];
-            }
+            if (tool === 'balloon') this.balloonColor = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
+            if (tool === 'cake') this.cakeStyle = CAKE_COLORS[Math.floor(Math.random() * CAKE_COLORS.length)];
         }
         update(dt) {
             this.t += dt / this.duration;
@@ -218,7 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
         draw(ctx) {
-            // Trail
             this.trail.forEach(p => {
                 if (p.a <= 0) return;
                 ctx.globalAlpha = p.a * 0.12;
@@ -226,12 +279,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.beginPath(); ctx.arc(p.x, p.y, 6 * this.scale, 0, Math.PI * 2); ctx.fill();
             });
             ctx.globalAlpha = 1;
-            // Shadow
             ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rot);
             const s = this.scale;
             ctx.fillStyle = 'rgba(0,0,0,0.18)';
             ctx.beginPath(); ctx.ellipse(2 * s, 4 * s, 12 * s, 8 * s, 0, 0, Math.PI * 2); ctx.fill();
-            // Shape
             this._drawShape(ctx, s);
             ctx.restore();
         }
@@ -258,8 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (this.tool === 'balloon') {
                 ctx.fillStyle = this.balloonColor; ctx.beginPath(); ctx.ellipse(0, 0, 11 * s, 14 * s, 0, 0, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.ellipse(-3 * s, -4 * s, 4 * s, 6 * s, -0.4, 0, Math.PI * 2); ctx.fill();
-                // Knot
-                const darker = this.balloonColor; ctx.fillStyle = darker;
+                ctx.fillStyle = this.balloonColor;
                 ctx.beginPath(); ctx.moveTo(-2 * s, 13 * s); ctx.lineTo(2 * s, 13 * s); ctx.lineTo(0, 17 * s); ctx.fill();
             }
         }
@@ -269,14 +319,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function impact(proj) {
         const { tx: x, ty: y, tool } = proj;
         hitCount++; document.getElementById('hit-count').textContent = hitCount;
-
         if (tool === 'tomato') {
-            drawTomatoSplat(x, y, Math.random() < 0.3); // 30% chance sticks whole
+            drawTomatoSplat(x, y, Math.random() < 0.3);
             spawnDroplets(x, y, '#cc0000', '#ff6659', 8);
             sfx('splat');
         } else if (tool === 'egg') {
-            const halfBoiled = Math.random() < 0.5;
-            drawEggSplat(x, y, halfBoiled);
+            drawEggSplat(x, y, Math.random() < 0.5);
             spawnDroplets(x, y, '#fafafa', '#ffcc00', 6);
             sfx('splat');
         } else if (tool === 'bottle') {
@@ -299,13 +347,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = splatCtx; ctx.save(); ctx.translate(x, y);
         const r = 30 + Math.random() * 25;
         if (stickWhole) {
-            // Whole splatted tomato stuck to wall
             ctx.fillStyle = '#c62828'; ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#e53935';
-            ctx.beginPath(); ctx.arc(0, -1, 14, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#e53935'; ctx.beginPath(); ctx.arc(0, -1, 14, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(-4, -4, 5, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#4caf50'; ctx.fillRect(-3, -18, 6, 5);
-            // Small splatter around
             const sg = ctx.createRadialGradient(0, 0, 14, 0, 0, r);
             sg.addColorStop(0, 'rgba(200,0,0,0.4)'); sg.addColorStop(1, 'rgba(150,0,0,0)');
             ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
@@ -315,7 +360,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.fillStyle = g; blob(ctx, 0, 0, r, 10);
             for (let i = 0; i < 6; i++) { const a = Math.random() * Math.PI * 2, d = Math.random() * r * 0.8; ctx.fillStyle = `rgba(${170 + Math.random() * 40},${Math.random() * 20},0,${0.5 + Math.random() * 0.3})`; blob(ctx, Math.cos(a) * d, Math.sin(a) * d, 4 + Math.random() * 7, 5); }
             ctx.fillStyle = '#ffe0b2'; for (let i = 0; i < 5; i++) { ctx.save(); ctx.translate(Math.random() * r * 0.5 - r * 0.25, Math.random() * r * 0.5 - r * 0.25); ctx.rotate(Math.random() * Math.PI); ctx.beginPath(); ctx.ellipse(0, 0, 3, 1.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
-            // Drip
             ctx.strokeStyle = 'rgba(180,10,10,0.35)'; ctx.lineWidth = 2 + Math.random();
             for (let i = 0; i < 3; i++) { const sx = (Math.random() - 0.5) * r * 0.6; ctx.beginPath(); ctx.moveTo(sx, r * 0.2); ctx.quadraticCurveTo(sx + Math.random() * 8 - 4, r * 0.5 + Math.random() * 15, sx + Math.random() * 4 - 2, r * 0.4 + 20 + Math.random() * 35); ctx.stroke(); }
         }
@@ -325,21 +369,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function drawEggSplat(x, y, halfBoiled) {
         const ctx = splatCtx; ctx.save(); ctx.translate(x, y);
         const r = 30 + Math.random() * 20;
-        // White
         ctx.fillStyle = 'rgba(250,250,245,0.82)'; blob(ctx, 0, 0, r * 0.85, 9);
-        // Yolk
         if (halfBoiled) {
-            // Cooked yolk: solid, slightly darker
             ctx.fillStyle = '#f9a825';
             ctx.beginPath(); ctx.arc(Math.random() * 8 - 4, Math.random() * 8 - 4, r * 0.28, 0, Math.PI * 2); ctx.fill();
         } else {
-            // Runny yolk
             const yx = Math.random() * 8 - 4, yy = Math.random() * 8 - 4;
             const yg = ctx.createRadialGradient(yx - 2, yy - 2, 2, yx, yy, r * 0.32);
             yg.addColorStop(0, '#fff176'); yg.addColorStop(0.6, '#fbc02d'); yg.addColorStop(1, '#f57f17');
             ctx.fillStyle = yg; ctx.beginPath(); ctx.arc(yx, yy, r * 0.3, 0, Math.PI * 2); ctx.fill();
         }
-        // Shell fragments (sometimes stick)
         if (Math.random() < 0.6) {
             ctx.fillStyle = 'rgba(220,210,190,0.7)';
             for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
@@ -378,7 +417,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const pg = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
         pg.addColorStop(0, hexToRgba(color, 0.45)); pg.addColorStop(0.7, hexToRgba(color, 0.15)); pg.addColorStop(1, hexToRgba(color, 0));
         ctx.fillStyle = pg; blob(ctx, 0, 0, r, 10);
-        // Latex scraps
         ctx.fillStyle = color; ctx.globalAlpha = 0.7;
         for (let i = 0; i < 3; i++) { ctx.save(); ctx.translate(Math.random() * r - r / 2, Math.random() * r - r / 2); ctx.rotate(Math.random() * Math.PI); ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(6, -4, 12, 1); ctx.quadraticCurveTo(6, 3, 0, 0); ctx.fill(); ctx.restore(); }
         ctx.globalAlpha = 1;
@@ -438,141 +476,180 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ═══ CONTINUOUS TOOLS (hold) ═══
+    // ═══ CONTINUOUS TOOLS ═══
     function doLaser(x, y) {
-        // Burn mark on splat canvas (dark char)
+        const r = toolSize * 0.4; // precise, tight burn
+        // Heavy char core
         splatCtx.save();
-        splatCtx.fillStyle = 'rgba(30,20,10,0.15)';
-        splatCtx.beginPath(); splatCtx.arc(x, y, 8, 0, Math.PI * 2); splatCtx.fill();
+        splatCtx.fillStyle = 'rgba(15,8,2,0.35)';
+        splatCtx.beginPath(); splatCtx.arc(x, y, r, 0, Math.PI * 2); splatCtx.fill();
+        // Hot inner core (brighter burn)
+        splatCtx.fillStyle = 'rgba(40,15,0,0.2)';
+        splatCtx.beginPath(); splatCtx.arc(x, y, r * 0.5, 0, Math.PI * 2); splatCtx.fill();
         // Scorch ring
-        splatCtx.strokeStyle = 'rgba(60,30,0,0.1)';
+        splatCtx.strokeStyle = 'rgba(80,30,0,0.15)';
         splatCtx.lineWidth = 2;
-        splatCtx.beginPath(); splatCtx.arc(x, y, 12, 0, Math.PI * 2); splatCtx.stroke();
+        splatCtx.beginPath(); splatCtx.arc(x, y, r * 1.3, 0, Math.PI * 2); splatCtx.stroke();
         splatCtx.restore();
-        if (Math.random() > 0.7) sfx('laser');
+        if (Math.random() > 0.6) sfx('laser');
     }
 
     function doFlame(x, y) {
-        // Wider burn
+        const r = toolSize;
         splatCtx.save();
-        const g = splatCtx.createRadialGradient(x, y, 0, x, y, 25);
-        g.addColorStop(0, 'rgba(40,20,5,0.08)');
-        g.addColorStop(0.5, 'rgba(60,30,5,0.04)');
+        // Multi-layered burn with stronger opacity
+        const g = splatCtx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, 'rgba(20,8,0,0.18)');
+        g.addColorStop(0.3, 'rgba(40,15,0,0.12)');
+        g.addColorStop(0.6, 'rgba(30,10,0,0.06)');
         g.addColorStop(1, 'rgba(0,0,0,0)');
         splatCtx.fillStyle = g;
-        splatCtx.fillRect(x - 25, y - 25, 50, 50);
+        splatCtx.fillRect(x - r, y - r, r * 2, r * 2);
+        // Ember spots
+        splatCtx.fillStyle = 'rgba(50,20,0,0.15)';
+        for (let i = 0; i < 3; i++) {
+            const ox = x + (Math.random() - 0.5) * r * 0.8;
+            const oy = y + (Math.random() - 0.5) * r * 0.8;
+            splatCtx.beginPath(); splatCtx.arc(ox, oy, 2 + Math.random() * 3, 0, Math.PI * 2); splatCtx.fill();
+        }
         splatCtx.restore();
-        if (Math.random() > 0.7) sfx('flame');
+        if (Math.random() > 0.6) sfx('flame');
     }
 
     function doSpray(x, y) {
+        const r = toolSize;
+        const spread = spraySpread;
         splatCtx.save();
         splatCtx.fillStyle = sprayColor;
-        for (let i = 0; i < 6; i++) {
-            const ox = x + (Math.random() - 0.5) * 20;
-            const oy = y + (Math.random() - 0.5) * 20;
-            splatCtx.globalAlpha = 0.06 + Math.random() * 0.06;
-            splatCtx.beginPath(); splatCtx.arc(ox, oy, 2 + Math.random() * 4, 0, Math.PI * 2); splatCtx.fill();
+
+        if (sprayMode === 'airbrush') {
+            // Soft, many tiny dots with varying opacity
+            const count = Math.floor(r * 0.5) + 3;
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * spread;
+                const ox = x + Math.cos(angle) * dist;
+                const oy = y + Math.sin(angle) * dist;
+                splatCtx.globalAlpha = 0.03 + Math.random() * 0.05;
+                splatCtx.beginPath();
+                splatCtx.arc(ox, oy, 1 + Math.random() * 3, 0, Math.PI * 2);
+                splatCtx.fill();
+            }
+        } else {
+            // Clean: solid fill circle
+            splatCtx.globalAlpha = 0.15;
+            splatCtx.beginPath();
+            splatCtx.arc(x, y, r * 0.5, 0, Math.PI * 2);
+            splatCtx.fill();
         }
+
         splatCtx.globalAlpha = 1;
         splatCtx.restore();
         if (Math.random() > 0.9) sfx('hiss');
     }
 
     function doHose(x, y) {
-        // Erase splat canvas in a circle
+        const r = toolSize;
         splatCtx.save();
         splatCtx.globalCompositeOperation = 'destination-out';
-        splatCtx.beginPath(); splatCtx.arc(x, y, 30, 0, Math.PI * 2); splatCtx.fill();
+        // Soft edge erase
+        const g = splatCtx.createRadialGradient(x, y, r * 0.3, x, y, r);
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        g.addColorStop(1, 'rgba(0,0,0,0.3)');
+        splatCtx.fillStyle = g;
+        splatCtx.beginPath(); splatCtx.arc(x, y, r, 0, Math.PI * 2); splatCtx.fill();
         splatCtx.restore();
         if (Math.random() > 0.8) sfx('hiss');
     }
 
     // ═══ FX DRAWING ═══
     function drawLaserFx(ctx, x, y) {
-        // Beam from top of screen
+        const beamW = Math.max(toolSize * 0.1, 1.5);
+        // Outer glow beam
         const grd = ctx.createLinearGradient(x, 0, x, y);
         grd.addColorStop(0, 'rgba(255,0,0,0)');
-        grd.addColorStop(0.7, 'rgba(255,50,50,0.4)');
-        grd.addColorStop(1, 'rgba(255,100,100,0.8)');
-        ctx.strokeStyle = grd;
-        ctx.lineWidth = 3;
+        grd.addColorStop(0.6, 'rgba(255,30,30,0.25)');
+        grd.addColorStop(1, 'rgba(255,80,80,0.7)');
+        ctx.strokeStyle = grd; ctx.lineWidth = beamW * 3;
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, y); ctx.stroke();
-        // Core
-        ctx.strokeStyle = 'rgba(255,200,200,0.9)';
-        ctx.lineWidth = 1;
+        // Core beam
+        ctx.strokeStyle = 'rgba(255,220,220,0.9)'; ctx.lineWidth = beamW;
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, y); ctx.stroke();
-        // Impact glow
-        ctx.fillStyle = 'rgba(255,80,30,0.6)';
-        ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+        // Impact glow (sized to toolSize)
+        const glowR = toolSize * 0.5;
+        ctx.fillStyle = 'rgba(255,60,20,0.5)';
+        ctx.beginPath(); ctx.arc(x, y, glowR, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(255,200,100,0.8)';
-        ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, glowR * 0.3, 0, Math.PI * 2); ctx.fill();
         // Sparks
-        ctx.fillStyle = 'rgba(255,200,50,0.8)';
-        for (let i = 0; i < 4; i++) {
-            const a = Math.random() * Math.PI * 2, d = 5 + Math.random() * 15;
-            ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, 1 + Math.random(), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,200,50,0.7)';
+        for (let i = 0; i < 5; i++) {
+            const a = Math.random() * Math.PI * 2, d = glowR * 0.5 + Math.random() * glowR;
+            ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, 1 + Math.random() * 1.5, 0, Math.PI * 2); ctx.fill();
         }
     }
 
     function drawFlameFx(ctx, x, y) {
-        // Flame particles
-        for (let i = 0; i < 12; i++) {
-            const ox = x + (Math.random() - 0.5) * 30;
-            const oy = y - Math.random() * 40;
-            const sz = 3 + Math.random() * 8;
+        const r = toolSize;
+        // Flame particles rising from impact
+        for (let i = 0; i < 14; i++) {
+            const ox = x + (Math.random() - 0.5) * r;
+            const oy = y - Math.random() * r * 1.5;
+            const sz = 2 + Math.random() * r * 0.2;
             const t = Math.random();
-            ctx.globalAlpha = 0.3 + Math.random() * 0.4;
-            if (t < 0.3) ctx.fillStyle = '#ff6f00';
-            else if (t < 0.6) ctx.fillStyle = '#ffab00';
-            else ctx.fillStyle = '#ff3d00';
+            ctx.globalAlpha = 0.3 + Math.random() * 0.5;
+            if (t < 0.25) ctx.fillStyle = '#ff3d00';
+            else if (t < 0.5) ctx.fillStyle = '#ff6f00';
+            else if (t < 0.75) ctx.fillStyle = '#ffab00';
+            else ctx.fillStyle = '#ffd600';
             ctx.beginPath(); ctx.arc(ox, oy, sz, 0, Math.PI * 2); ctx.fill();
         }
         ctx.globalAlpha = 1;
         // Base glow
-        ctx.fillStyle = 'rgba(255,100,0,0.15)';
-        ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI * 2); ctx.fill();
+        const gg = ctx.createRadialGradient(x, y, 0, x, y, r);
+        gg.addColorStop(0, 'rgba(255,100,0,0.2)');
+        gg.addColorStop(1, 'rgba(255,60,0,0)');
+        ctx.fillStyle = gg;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
     }
 
     function drawHoseFx(ctx, x, y) {
-        // Static jet spray lines from left edge
+        const r = toolSize;
         const startX = 0, startY = H * 0.5;
-        // Main stream
-        ctx.strokeStyle = 'rgba(100,200,255,0.35)';
-        ctx.lineWidth = 6;
+        // Outer stream
+        ctx.strokeStyle = 'rgba(100,200,255,0.3)'; ctx.lineWidth = 5;
         ctx.beginPath(); ctx.moveTo(startX, startY);
-        ctx.quadraticCurveTo(x * 0.5, startY + (y - startY) * 0.3, x, y);
-        ctx.stroke();
+        ctx.quadraticCurveTo(x * 0.5, startY + (y - startY) * 0.3, x, y); ctx.stroke();
         // Core
-        ctx.strokeStyle = 'rgba(180,230,255,0.5)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(180,230,255,0.45)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(startX, startY);
-        ctx.quadraticCurveTo(x * 0.5, startY + (y - startY) * 0.3, x, y);
-        ctx.stroke();
+        ctx.quadraticCurveTo(x * 0.5, startY + (y - startY) * 0.3, x, y); ctx.stroke();
         // Splash at impact
-        ctx.fillStyle = 'rgba(100,200,255,0.4)';
+        ctx.fillStyle = 'rgba(100,200,255,0.35)';
         for (let i = 0; i < 8; i++) {
-            const a = Math.random() * Math.PI * 2, d = 5 + Math.random() * 18;
+            const a = Math.random() * Math.PI * 2, d = r * 0.3 + Math.random() * r * 0.7;
             ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, 2 + Math.random() * 3, 0, Math.PI * 2); ctx.fill();
         }
-        // Mist
-        ctx.fillStyle = 'rgba(180,230,255,0.08)';
-        ctx.beginPath(); ctx.arc(x, y, 30, 0, Math.PI * 2); ctx.fill();
+        // Radius indicator
+        ctx.strokeStyle = 'rgba(100,200,255,0.12)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
     }
 
     function drawSprayFx(ctx, x, y) {
+        const r = toolSize;
+        const spread = spraySpread;
         ctx.fillStyle = sprayColor;
-        for (let i = 0; i < 10; i++) {
-            ctx.globalAlpha = 0.1 + Math.random() * 0.15;
-            const ox = x + (Math.random() - 0.5) * 24, oy = y + (Math.random() - 0.5) * 24;
-            ctx.beginPath(); ctx.arc(ox, oy, 1 + Math.random() * 2, 0, Math.PI * 2); ctx.fill();
+        for (let i = 0; i < 8; i++) {
+            ctx.globalAlpha = 0.08 + Math.random() * 0.12;
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * spread;
+            ctx.beginPath(); ctx.arc(x + Math.cos(angle) * dist, y + Math.sin(angle) * dist, 1 + Math.random() * 2, 0, Math.PI * 2); ctx.fill();
         }
         ctx.globalAlpha = 1;
-        // Cone indicator
-        ctx.strokeStyle = sprayColor;
-        ctx.globalAlpha = 0.15;
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(x, y, 14, 0, Math.PI * 2); ctx.stroke();
+        // Radius indicator
+        ctx.strokeStyle = sprayColor; ctx.globalAlpha = 0.12; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(x, y, spread, 0, Math.PI * 2); ctx.stroke();
         ctx.globalAlpha = 1;
     }
 
@@ -582,10 +659,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function loop(time) {
         const dt = Math.min((time - lastTime) / 1000, 0.05);
         lastTime = time;
-
         Engine.update(engine, dt * 1000);
 
-        // Update projectiles
         for (let i = projectiles.length - 1; i >= 0; i--) {
             if (projectiles[i].update(dt)) {
                 impact(projectiles[i]);
@@ -593,7 +668,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Drip viscosity
         debris.forEach(d => {
             if (d.type === 'drop') {
                 const v = d.body.velocity;
@@ -601,7 +675,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Remove offscreen debris
         for (let i = debris.length - 1; i >= 0; i--) {
             if (debris[i].body.position.y > H + 60) {
                 World.remove(engine.world, debris[i].body);
@@ -609,7 +682,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Continuous tools
         if (isDown) {
             if (currentTool === 'hose') doHose(mouseX, mouseY);
             if (currentTool === 'laser') doLaser(mouseX, mouseY);
@@ -619,11 +691,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Draw FX
         fxCtx.clearRect(0, 0, W, H);
-
-        // Projectiles
         projectiles.forEach(p => p.draw(fxCtx));
 
-        // Debris
         debris.forEach(d => {
             const p = d.body.position, a = d.body.angle;
             fxCtx.save(); fxCtx.translate(p.x, p.y); fxCtx.rotate(a);
@@ -639,7 +708,6 @@ document.addEventListener('DOMContentLoaded', () => {
             fxCtx.restore();
         });
 
-        // Continuous tool FX overlays
         if (isDown) {
             if (currentTool === 'laser') drawLaserFx(fxCtx, mouseX, mouseY);
             if (currentTool === 'flame') drawFlameFx(fxCtx, mouseX, mouseY);
@@ -663,12 +731,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleMove(x, y) { mouseX = x; mouseY = y; }
     function handleEnd() { isDown = false; }
 
-    // Mouse events
     wallArea.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
     window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
     window.addEventListener('mouseup', handleEnd);
 
-    // Touch events
     wallArea.addEventListener('touchstart', e => {
         e.preventDefault();
         const t = e.touches[0];
@@ -679,10 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = e.touches[0];
         if (t) handleMove(t.clientX, t.clientY);
     }, { passive: false });
-    window.addEventListener('touchend', e => {
-        handleEnd();
-    });
+    window.addEventListener('touchend', () => handleEnd());
 
     wallArea.addEventListener('contextmenu', e => e.preventDefault());
 });
-
